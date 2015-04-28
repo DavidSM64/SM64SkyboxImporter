@@ -57,9 +57,9 @@ public class Main extends JFrame implements ActionListener{
     JFileChooser jfc;
     JButton openROM = new JButton("Browse");
     JTextField romLoc = new JTextField();
-    JTextField address = new JTextField("C3AFD5");
+    JTextField address = new JTextField("B35715");
     JTextField widthF = new JTextField("256");
-    JTextField heightF = new JTextField("160");
+    JTextField heightF = new JTextField("256");
     JPanel ImagePreview = new JPanel();
     JButton importPNG = new JButton("Import (.png)");
     JButton exportPNG = new JButton("Export (.png)");
