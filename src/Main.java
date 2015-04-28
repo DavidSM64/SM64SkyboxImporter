@@ -36,6 +36,7 @@ import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
@@ -53,7 +54,7 @@ public class Main extends JFrame implements ActionListener{
     
     HashMap<String, Dimension> SkyBoxes = new HashMap<String, Dimension>();
     
-    JFileChooser jfc = new JFileChooser();
+    JFileChooser jfc;
     JButton openROM = new JButton("Browse");
     JTextField romLoc = new JTextField();
     JTextField address = new JTextField("C3AFD5");
@@ -148,6 +149,7 @@ public class Main extends JFrame implements ActionListener{
         f.setVisible(true);
         f.setLocationRelativeTo(null);
         setupPrePanel();
+        jfc = new JFileChooser();
     }
     
     private JButton MakeButton(String text, String tooltip){
@@ -251,10 +253,9 @@ public class Main extends JFrame implements ActionListener{
     
     @Override
     public void actionPerformed(ActionEvent e) {
-      // System.out.println(e.getActionCommand());
-       
        switch(e.getActionCommand()){
             case "Browse":
+                jfc.resetChoosableFileFilters();
                 jfc.setFileFilter(new FileNameExtensionFilter(".z64 File", "z64"));
                 jfc.setAcceptAllFileFilterUsed(false);
                 if (jfc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
@@ -289,21 +290,24 @@ public class Main extends JFrame implements ActionListener{
                 }
             break;
             case "Export (.png)":
+                jfc.resetChoosableFileFilters();
                 jfc.setFileFilter(new FileNameExtensionFilter(".png Image", "png"));
                 jfc.setAcceptAllFileFilterUsed(false);
                 jfc.setSelectedFile(new File("Skybox.png"));
                 if (jfc.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
                 File file = jfc.getSelectedFile();
-                   // try {
-                        //ImageIO.write(RenderImage(), "PNG", file);
-                   // } catch (IOException ex) {
-                    //    Logger.getLogger(Main.class.getName()).log(Level.SEVERE, null, ex);
-                   // }
+                    try {
+                        ImageIO.write(exportImg(), "PNG", file);
+                    } catch (IOException ex) {
+                        Logger.getLogger(Main.class.getName()).log(Level.SEVERE, null, ex);
+                    }
                 }
             break;
             case "Import (.png)":
+                jfc.resetChoosableFileFilters();
                 jfc.setFileFilter(new FileNameExtensionFilter(".png Image", "png"));
                 jfc.setAcceptAllFileFilterUsed(false);
+                jfc.setSelectedFile(new File(""));
                 if (jfc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
                     File file = jfc.getSelectedFile();
                     ImportTexture(file);
@@ -345,14 +349,14 @@ public class Main extends JFrame implements ActionListener{
        }
        
        try{
-        isChanging = true;
-        int img = Integer.parseInt(e.getActionCommand());
-        currentImg = img;
-        if(test.equals(img+"")){test="null"; f.remove(p); f.setSize(380,440);}
-        else if(test.equals("null")){test=img+"";updatePrePanel(img); f.add(p,2);f.setSize(380,480);}
-        else{ test = img+"";updatePrePanel(img);}
-        f.revalidate();
-        isChanging = false;
+            isChanging = true;
+            int img = Integer.parseInt(e.getActionCommand());
+            currentImg = img;
+            if(test.equals(img+"")){test="null"; f.remove(p); f.setSize(380,440);}
+            else if(test.equals("null")){test=img+"";updatePrePanel(img); f.add(p,2);f.setSize(380,480);}
+            else{ test = img+"";updatePrePanel(img);}
+            f.revalidate();
+            isChanging = false;
        }catch(NumberFormatException ex){}
     }
     
@@ -401,6 +405,21 @@ public class Main extends JFrame implements ActionListener{
         bb.put(bytes);
 
         RenderImage();
+    }
+    
+    private BufferedImage exportImg(){
+        BufferedImage bi = new BufferedImage(256,256,BufferedImage.TYPE_INT_ARGB);
+        
+        int count = 0;  
+        for(int y = 0; y < 8;y++){
+            for(int x = 0; x < 8;x++){
+                Image img = ((ImageIcon)imageButtons[count++].getIcon()).getImage();
+                Graphics2D gr = bi.createGraphics();  
+                gr.drawImage(img,32 * x, 32 * y, 32 * x + 32, 32 * y + 32,0,0,32,32, null);  
+                gr.dispose();
+            }
+        }
+        return bi;
     }
     
     
@@ -474,7 +493,7 @@ public class Main extends JFrame implements ActionListener{
         for (int i = 0; i < numOfChunks; i++) {
             BufferedImage mImage = new BufferedImage(32, 32, BufferedImage.TYPE_4BYTE_ABGR_PRE);
             mImage.getRaster().setPixels(0, 0, 32, 32, chunk[i]);
-            imgs[i] = resize(mImage,64,64).getSubimage(1, 1, 63, 63);
+            imgs[i] = resize(mImage,64,64,false).getSubimage(1, 1, 63, 63);
         }
         images = imgs;
         
@@ -482,9 +501,9 @@ public class Main extends JFrame implements ActionListener{
         for(int i = 0; i < 80; i++){
             if(i%10==8||i%10==9)continue;
             int place = (BytesToInt(order,(int)i*4) << 8)>>8;
-            imageButtons[count].setIcon(new ImageIcon(resize(imgs[place/0x800],32,32)));
+            imageButtons[count].setIcon(new ImageIcon(resize(imgs[place/0x800],32,32,false)));
             imageButtons[count].setFocusPainted(false);
-            BufferedImage b = resize(imgs[place/0x800],32,32);
+            BufferedImage b = resize(imgs[place/0x800],32,32,false);
             RescaleOp op = new RescaleOp(1.5f, 100, null);
             b = op.filter(b, b);
             imageButtons[count].setRolloverIcon(new ImageIcon(b));
@@ -493,8 +512,11 @@ public class Main extends JFrame implements ActionListener{
     
     }
     
-    private BufferedImage resize(BufferedImage img, int newW, int newH) { 
-        Image tmp = img.getScaledInstance(newW, newH, Image.SCALE_SMOOTH);
+    private BufferedImage resize(BufferedImage img, int newW, int newH, boolean special) { 
+        Image tmp;
+        if(special)tmp = img.getSubimage(0, 0, newW+8, newH+8).getScaledInstance(newW, newH, Image.SCALE_SMOOTH);
+        else tmp = img.getScaledInstance(newW, newH, Image.SCALE_SMOOTH);
+        
         BufferedImage dimg = new BufferedImage(newW, newH, BufferedImage.TYPE_INT_ARGB);
 
         Graphics2D g2d = dimg.createGraphics();
@@ -502,32 +524,13 @@ public class Main extends JFrame implements ActionListener{
         g2d.dispose();
 
         return dimg;
-    }  
+    } 
+    
     private int BytesToInt(byte[] buffer, int startAddress){
         return ByteBuffer.wrap(buffer).getInt(startAddress);
     }
     private  byte[] IntToBytes(int anInt){
         return ByteBuffer.allocate(4).putInt(anInt).array();
-    }
-    private void PrintHexBytes(byte[] bytes, int amount){
-        //String b = "HEXBYTES: ";
-        String b = "";
-        for (int i = 0; i < amount;i++){
-            b += fix(Integer.toHexString(bytes[i] & 0xFF))+" ";
-        }
-        System.out.println(b);
-        //System.out.println(b+"<br/>");
-    }
-    private void PrintHexInts(Integer[] bytes, int amount){
-        //String b = "HEXBYTES: ";
-        String b = "";
-        for (int i = 0; i < amount;i++){
-            Integer ii = bytes[i];
-            if (ii == null) continue;
-            b += fix(Integer.toHexString(ii))+" ";
-        }
-        System.out.println(b);
-        //System.out.println(b+"<br/>");
     }
     private String fix(String f){
         if (f.length() == 1) return "0"+f.toUpperCase();
@@ -537,22 +540,35 @@ public class Main extends JFrame implements ActionListener{
     private void ImportTexture(File file){
         width = Integer.parseInt(widthF.getText());
         height = Integer.parseInt(heightF.getText());
+        int origHeight = 0;
         BufferedImage img = null;
+        BufferedImage img2 = null;
         try {
             img = ImageIO.read(file);
-            
+            origHeight = img.getHeight();
             if (img.getWidth()%31 == 0 && img.getHeight()%31 == 0) img = UpscaleImg(img,width,height);
             else {
-                resize(img,width-8,height-8);
+                if(img.getHeight()>height){
+                    img2 = img.getSubimage(0, height, 256, img.getHeight()-height);
+                }
+                img = resize(img,width-8,height-8,true);
                 img = UpscaleImg(img,width,height);
+                
             }
         } catch (IOException e) {}
         
         if (img != null){
         
-        int rows = img.getWidth()/32;
-        int cols = img.getHeight()/32;  
+        int rows = width/32;
+        int cols = height/32;  
         int chunks = rows * cols; 
+        int extra = 0;
+        
+        if (cols < 8 && origHeight > height){
+            chunks+=1;
+            extra=0x800;
+        }
+        
   
         int count = 0;  
         BufferedImage[] imgs = new BufferedImage[chunks]; 
@@ -564,11 +580,27 @@ public class Main extends JFrame implements ActionListener{
                 32 * y + 32, 32 * x + 32, null);  
                 gr.dispose();  
             }  
-        }  
+        }
         
-        byte[] rgba5 = new byte[width*height*2];
+        if (img2!=null){
+            imgs[chunks-1] = new BufferedImage(32, 32, img2.getType());  
+            Graphics2D gr = imgs[chunks-1].createGraphics();  
+            gr.drawImage(img2, 0, 0, 32, 32,0,0,32,32, null);  
+            gr.dispose(); 
+        }
+        
+        /*
+        JFrame frame = new JFrame();
+        frame.setLayout(new BoxLayout(frame.getContentPane(),BoxLayout.Y_AXIS));
+        frame.getContentPane().add(new JLabel(new ImageIcon(img)));
+        if(img2!=null)frame.getContentPane().add(new JLabel(new ImageIcon(img2)));
+        frame.pack();
+        frame.setVisible(true);
+        */
+        
+        byte[] rgba5 = new byte[width*height*2+extra];
         int l = 0;
-        for (int i = 0; i < rows*cols; i++){
+        for (int i = 0; i < rows*cols+(extra/0x800); i++){
             BufferedImage output = imgs[i];
             for (int y = 0; y < 32; y++) {
                 for (int x = 0; x < 32; x++) {
@@ -585,6 +617,7 @@ public class Main extends JFrame implements ActionListener{
                 }
             }
         }
+        
         int start = Integer.parseInt(address.getText(),16);
         ByteBuffer bb = ByteBuffer.wrap(rom);
         bb.position(start);
@@ -633,11 +666,16 @@ public class Main extends JFrame implements ActionListener{
         BufferedImage converted = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
         int rows = width/32;
         int cols = height/32;
+        boolean qf = true;
+        if(rows*cols > 63) qf = false;
         for (int y = 0; y < cols; y ++) {
             for (int x = 0; x < rows; x++) {
                 for (int inY = 0; inY < 32; inY++) {
                     for (int inX = 0; inX < 32; inX++) {
-                        converted.setRGB(inX+32*x, inY+32*y, orig.getRGB((inX+31*x)%orig.getWidth(), (inY+31*y)%orig.getHeight()));
+                        if(qf && (y == cols-1 && inY == 31))
+                        converted.setRGB(inX+32*x, inY+32*y,orig.getRGB((inX+31*x)%orig.getWidth(), (inY+31*y-1)%orig.getHeight()));
+                        else
+                        converted.setRGB(inX+32*x, inY+32*y,orig.getRGB((inX+31*x)%orig.getWidth(), (inY+31*y)%orig.getHeight()));
                     }
                 }
             }
@@ -662,10 +700,10 @@ public class Main extends JFrame implements ActionListener{
     public static void main(String[] args) {
         try { 
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-        } catch (ClassNotFoundException | IllegalAccessException | 
-        InstantiationException | UnsupportedLookAndFeelException e) {
+            new Main();
+        } catch (ClassNotFoundException | IllegalAccessException | InstantiationException | UnsupportedLookAndFeelException e) {
+            JOptionPane.showMessageDialog(null,e.getMessage(),"Error",JOptionPane.ERROR_MESSAGE);
         }
-        Main m = new Main();
     }
     
     public class SaveBytes implements Runnable {
