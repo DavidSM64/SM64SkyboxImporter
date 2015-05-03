@@ -89,7 +89,7 @@ public class Main extends JFrame implements ActionListener{
         SkyBoxes.put("Dark World: C57915", new Dimension(256,256));
         SkyBoxes.put("Purple Sky: C7FA55", new Dimension(256,256));
         
-        f = new JFrame("SM64 Skybox Editor v1.1");
+        f = new JFrame("SM64 Skybox Editor v1.11");
         f.setLayout(new BoxLayout(f.getContentPane(),BoxLayout.Y_AXIS));
 
         sizeAll(ImagePreview,32*8+8,32*8+8);
@@ -408,18 +408,26 @@ public class Main extends JFrame implements ActionListener{
     }
     
     private BufferedImage exportImg(){
-        BufferedImage bi = new BufferedImage(256,256,BufferedImage.TYPE_INT_ARGB);
-        
-        int count = 0;  
+        BufferedImage bi = new BufferedImage(248,248,BufferedImage.TYPE_INT_ARGB);
+         
         for(int y = 0; y < 8;y++){
             for(int x = 0; x < 8;x++){
-                Image img = ((ImageIcon)imageButtons[count++].getIcon()).getImage();
+                BufferedImage mImage = new BufferedImage(32, 32, BufferedImage.TYPE_INT_ARGB);
+                mImage.getRaster().setPixels(0, 0, 32, 32, getChunk(y*8+x));
                 Graphics2D gr = bi.createGraphics();  
-                gr.drawImage(img,32 * x, 32 * y, 32 * x + 32, 32 * y + 32,0,0,32,32, null);  
+                gr.drawImage(mImage,31 * x, 31 * y, 31 * x + 31, 31 * y + 31,0,0,31,31, null);  
                 gr.dispose();
             }
         }
         return bi;
+    }
+    
+    private int[] getChunk(int c){
+        try{
+            return chunk[c];
+        } catch(Exception e){
+            return chunk[(width/32)*(height/32)];
+        }
     }
     
     
@@ -460,7 +468,7 @@ public class Main extends JFrame implements ActionListener{
     fr.setAlwaysOnTop(true);
     return fr;
     }
-    
+    int[][] chunk;
     private void RenderImage(){
         width = Integer.parseInt(widthF.getText());
         height = Integer.parseInt(heightF.getText());
@@ -469,19 +477,19 @@ public class Main extends JFrame implements ActionListener{
         
         int start = Integer.parseInt(address.getText(),16);
         int end = start+(width*height*2)+(0x800*extra);
-        //System.out.println("Start: "+fix(Integer.toHexString(start))+", End: "+fix(Integer.toHexString(end)));
         byte[] data = Arrays.copyOfRange(rom, start, end);
 
         int numOfChunks = (width/32)*(height/32)+(1*extra);
-        int[][] chunk = new int[numOfChunks][4096];
+        chunk = new int[numOfChunks][4096];
         int c = 0;
         for(int i=0; i<numOfChunks*2048;i+=2){
             int a = i/2048;
             short LoadRGBA_RGBA5551 = (short)(((data[i]&0xFF) * 0x100) + (data[i+1]&0xFF));
-            chunk[a][c%4096] = ((LoadRGBA_RGBA5551 >> 11)&0x1F)*8;
-            chunk[a][c%4096+1] = ((LoadRGBA_RGBA5551 >> 6)&0x1F)*8;
-            chunk[a][c%4096+2] = ((LoadRGBA_RGBA5551 >> 1)&0x1F)*8;
-            chunk[a][c%4096+3] = (byte)0xFF;
+            chunk[a][c%4096] = (((LoadRGBA_RGBA5551 >> 11)&0x1F)*0xFF)/0x1F;
+            chunk[a][c%4096+1] = (((LoadRGBA_RGBA5551 >> 6)&0x1F)*0xFF)/0x1F;
+            chunk[a][c%4096+2] = (((LoadRGBA_RGBA5551 >> 1)&0x1F)*0xFF)/0x1F;
+            chunk[a][c%4096+3] = (byte)((LoadRGBA_RGBA5551 & 1) * 0xFF);
+            //System.out.println(chunk[a][c%4096+1]+","+chunk[a][c%4096+2]+","+chunk[a][c%4096+3]);
             c+=4;
         }
         
@@ -491,7 +499,7 @@ public class Main extends JFrame implements ActionListener{
        // PrintHexBytes(order,order.length);
         BufferedImage[] imgs = new BufferedImage[numOfChunks];
         for (int i = 0; i < numOfChunks; i++) {
-            BufferedImage mImage = new BufferedImage(32, 32, BufferedImage.TYPE_4BYTE_ABGR_PRE);
+            BufferedImage mImage = new BufferedImage(32, 32, BufferedImage.TYPE_INT_ARGB);
             mImage.getRaster().setPixels(0, 0, 32, 32, chunk[i]);
             imgs[i] = resize(mImage,64,64,false).getSubimage(1, 1, 63, 63);
         }
@@ -546,14 +554,28 @@ public class Main extends JFrame implements ActionListener{
         try {
             img = ImageIO.read(file);
             origHeight = img.getHeight();
-            if (img.getWidth()%31 == 0 && img.getHeight()%31 == 0) img = UpscaleImg(img,width,height);
-            else {
+            if (img.getWidth()%31 == 0 && img.getHeight()%31 == 0){ 
+                int h = img.getHeight()/31;
+                if(img.getHeight()>height){
+                    img2 = img.getSubimage(0, height-h, 248, (img.getHeight())-(height-h));
+                    img2 = UpscaleImg(img2,width,(img2.getHeight()+h));
+                }
+                img = UpscaleImg(img,width,height);
+            }
+            else if (img.getWidth()%32 == 0 && img.getHeight()%32 == 0) {
                 if(img.getHeight()>height){
                     img2 = img.getSubimage(0, height, 256, img.getHeight()-height);
                 }
                 img = resize(img,width-8,height-8,true);
                 img = UpscaleImg(img,width,height);
-                
+            } else {
+            JOptionPane.showMessageDialog(
+            null,
+            "Both the width & height of the imported image should be divisible by 31 or 32",
+            "Error",
+            JOptionPane.ERROR_MESSAGE
+            );
+            return;
             }
         } catch (IOException e) {}
         
@@ -568,7 +590,6 @@ public class Main extends JFrame implements ActionListener{
             chunks+=1;
             extra=0x800;
         }
-        
   
         int count = 0;  
         BufferedImage[] imgs = new BufferedImage[chunks]; 
@@ -576,8 +597,7 @@ public class Main extends JFrame implements ActionListener{
             for (int y = 0; y < rows; y++) {  
                 imgs[count] = new BufferedImage(32, 32, img.getType());  
                 Graphics2D gr = imgs[count++].createGraphics();  
-                gr.drawImage(img, 0, 0, 32, 32, 32 * y, 32 * x, 
-                32 * y + 32, 32 * x + 32, null);  
+                gr.drawImage(img, 0, 0, 32, 32, 32 * y, 32 * x, 32 * y + 32, 32 * x + 32, null);  
                 gr.dispose();  
             }  
         }
@@ -597,7 +617,6 @@ public class Main extends JFrame implements ActionListener{
         frame.pack();
         frame.setVisible(true);
         */
-        
         byte[] rgba5 = new byte[width*height*2+extra];
         int l = 0;
         for (int i = 0; i < rows*cols+(extra/0x800); i++){
@@ -606,10 +625,10 @@ public class Main extends JFrame implements ActionListener{
                 for (int x = 0; x < 32; x++) {
                     try {
                         Color c = new Color(output.getRGB(x, y), true);
-                        int conv = convertTo5551(c.getRed(),c.getGreen(),c.getBlue(),c.getAlpha());
-                        byte[] convB = ByteBuffer.allocate(4).putInt(conv).array();
-                        rgba5[l] = convB[2];
-                        rgba5[l+1] = convB[3];
+                        short conv = convertTo5551(c.getRed(),c.getGreen(),c.getBlue(),c.getAlpha());
+                        byte[] convB = ByteBuffer.allocate(2).putShort(conv).array();
+                        rgba5[l] = convB[0];
+                        rgba5[l+1] = convB[1];
                         l+=2;
                     } catch (IOException ex) {
                         Logger.getLogger(Main.class.getName()).log(Level.SEVERE, null, ex);
@@ -617,7 +636,6 @@ public class Main extends JFrame implements ActionListener{
                 }
             }
         }
-        
         int start = Integer.parseInt(address.getText(),16);
         ByteBuffer bb = ByteBuffer.wrap(rom);
         bb.position(start);
@@ -674,6 +692,8 @@ public class Main extends JFrame implements ActionListener{
                     for (int inX = 0; inX < 32; inX++) {
                         if(qf && (y == cols-1 && inY == 31))
                         converted.setRGB(inX+32*x, inY+32*y,orig.getRGB((inX+31*x)%orig.getWidth(), (inY+31*y-1)%orig.getHeight()));
+                        else if(qf && (y == cols-1 && inY == 0))
+                        converted.setRGB(inX+32*x, inY+32*y,orig.getRGB((inX+31*x)%orig.getWidth(), (inY+31*y+1)%orig.getHeight()));
                         else
                         converted.setRGB(inX+32*x, inY+32*y,orig.getRGB((inX+31*x)%orig.getWidth(), (inY+31*y)%orig.getHeight()));
                     }
@@ -683,18 +703,17 @@ public class Main extends JFrame implements ActionListener{
         return converted;
     }
     
-    int convertTo5551(int r, int g, int b, int a) throws IOException {
-        int r5 = r * 31 / 255;
-        int g5 = (int) g * 31 / 255;
-        int b5 = (int) b * 31 / 255;
-        int a1 = (a > 0) ? 0 : -1;
-        int rShift = (int) r5 << 11;
-        int bShift = (int) g5 << 6;
-        int gShift = (int) b5 << 1;
+    short convertTo5551(int r, int g, int b, int a) throws IOException {
+        int r5 = (r+8) * 31 / 255;
+        int g5 = (g+8) * 31 / 255;
+        int b5 = (b+8) * 31 / 255;
+        int a1 = (a > 0) ? 1 : 0;
+        int rShift = r5 << 11;
+        int gShift = g5 << 6;
+        int bShift = b5 << 1;
         
         // Combine and return
-        int abgr5551 = (int) (bShift | gShift | rShift | a1);
-        return abgr5551;
+        return (short) (rShift | gShift | bShift | a1);
     }
     
     public static void main(String[] args) {
